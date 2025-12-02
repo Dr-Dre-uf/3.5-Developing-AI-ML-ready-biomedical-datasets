@@ -1,26 +1,25 @@
 # --------------------------------------------------------------
-# app.py – Interactive genomic‑preprocessing explorer
+# app.py – Interactive genomic‑preprocessing explorer (no icons)
 # --------------------------------------------------------------
 import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import zscore
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
-# ------------------------------------------------------------------
-# Page configuration
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
+# Page configuration (icon removed)
+# --------------------------------------------------------------
 st.set_page_config(
     page_title="Genomic Pre‑processing Explorer",
     layout="wide",
 )
 
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 # 1️⃣  Simulated genomic dataset (identical to the notebook)
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 @st.cache_data
 def load_data() -> pd.DataFrame:
     np.random.seed(42)
@@ -36,20 +35,20 @@ def load_data() -> pd.DataFrame:
             np.random.normal(5, 1, 95), [15, 16, 18, 20, 22]
         ),  # Outliers
         "Missing_Feature": [
-            np.nan if i % 10 == 0 else np.random.normal(5, 1) for i in range(100)
+            np.nan if i % 10 == 0 else np.random.normal(5, 1)
+            for i in range(100)
         ],
     }
     return pd.DataFrame(data)
 
-
 df_raw = load_data()
 
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 # 2️⃣  Sidebar – user‑controlled preprocessing knobs
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 st.sidebar.header("Pre‑processing Settings")
 
-# Winsorization (capping) percentiles
+# Winsorization percentiles
 lower_pct = st.sidebar.slider(
     "Lower Winsorization Percentile", min_value=0, max_value=20, value=5, step=1
 )
@@ -62,34 +61,34 @@ impute_strategy = st.sidebar.selectbox(
     "Missing‑Value Imputation", ["mean", "median", "most_frequent"]
 )
 
-# Scaling option for the numeric features
+# Feature scaling choice
 scale_option = st.sidebar.radio(
-    "Feature Scaling",
-    ("Standard (Z‑score)", "Min‑Max", "None"),
+    "Feature Scaling", ("Standard (Z‑score)", "Min‑Max", "None")
 )
 
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 # 3️⃣  Helper functions
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
 def cap_outliers(series: pd.Series, lower: int, upper: int) -> pd.Series:
-    """Winsorize a series using the given percentile bounds."""
     lo, hi = np.percentile(series, [lower, upper])
     return np.clip(series, lo, hi)
 
+def zscore_manual(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute Z‑scores with NumPy/Pandas (no scipy)."""
+    return (df - df.mean()) / df.std(ddof=0)
 
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
-    """Apply outlier capping, imputation, and scaling."""
     df = df.copy()
 
-    # ---- 1️⃣  Outlier handling ------------------------------------
+    # ---- Outlier handling (Winsorization) -----------------------
     for col in ["Expression_Level", "Mutation_Frequency", "Pathway_Score"]:
         df[col] = cap_outliers(df[col], lower_pct, upper_pct)
 
-    # ---- 2️⃣  Missing‑value imputation -----------------------------
+    # ---- Missing‑value imputation --------------------------------
     imp = SimpleImputer(strategy=impute_strategy)
     df["Missing_Feature"] = imp.fit_transform(df[["Missing_Feature"]])
 
-    # ---- 3️⃣  Scaling ------------------------------------------------
+    # ---- Scaling -------------------------------------------------
     numeric_cols = ["Expression_Level", "Mutation_Frequency", "Pathway_Score"]
     if scale_option == "Standard (Z‑score)":
         scaler = StandardScaler()
@@ -97,71 +96,63 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     elif scale_option == "Min‑Max":
         scaler = MinMaxScaler()
         df[numeric_cols] = scaler.fit_transform(df[numeric_cols])
-    # else: leave as‑is (None)
+    # else: keep original values
 
-    # Normalise the imputed feature (mirrors the original notebook)
+    # Normalise the imputed feature (as in the original notebook)
     df[["Missing_Feature"]] = MinMaxScaler().fit_transform(
         df[["Missing_Feature"]]
     )
 
     return df
 
-
 df_processed = preprocess(df_raw)
 
-# ------------------------------------------------------------------
-# 4️⃣  Main layout – show data, stats, and visualisations
-# ------------------------------------------------------------------
+# --------------------------------------------------------------
+# 4️⃣  Layout – data tables & visualisations
+# --------------------------------------------------------------
 st.title("Genomic Data Pre‑processing Explorer")
 
-# ---- Side‑by‑side data snapshots ------------------------------------
-col_raw, col_proc = st.columns(2)
-
-with col_raw:
-    st.subheader("Raw Data (first 5 rows)")
+c1, c2 = st.columns(2)
+with c1:
+    st.subheader("Raw data (first 5 rows)")
     st.dataframe(df_raw.head())
-
-with col_proc:
-    st.subheader("Processed Data (first 5 rows)")
+with c2:
+    st.subheader("Processed data (first 5 rows)")
     st.dataframe(df_processed.head())
 
 st.markdown("---")
 
-# ---- Outlier detection on the raw data -------------------------------
-st.subheader("Outlier Detection (Z‑score) – Raw Data")
-z_scores_raw = df_raw[
-    ["Expression_Level", "Mutation_Frequency", "Pathway_Score"]
-].apply(zscore)
+# ---- Outlier detection on raw data (manual Z‑score) ----------
+st.subheader("Outlier detection (Z‑score) on raw data")
+z_raw = zscore_manual(
+    df_raw[["Expression_Level", "Mutation_Frequency", "Pathway_Score"]]
+)
+out_counts = ((z_raw > 3) | (z_raw < -3)).sum()
+st.write(out_counts)
 
-outlier_counts = ((z_scores_raw > 3) | (z_scores_raw < -3)).sum()
-st.write(outlier_counts)
-
-# ---- Box‑plot comparison ---------------------------------------------
-st.subheader("Box‑Plot: Raw vs. Processed Features")
-fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
+# ---- Box‑plot comparison ----------------------------------------
+st.subheader("Box‑plot: Raw vs. Processed")
+fig, axs = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
 
 sns.boxplot(
     data=df_raw[["Expression_Level", "Mutation_Frequency", "Pathway_Score"]],
-    ax=axes[0],
+    ax=axs[0],
     palette="pastel",
 )
-axes[0].set_title("Raw")
+axs[0].set_title("Raw")
 
 sns.boxplot(
     data=df_processed[
         ["Expression_Level", "Mutation_Frequency", "Pathway_Score"]
     ],
-    ax=axes[1],
+    ax=axs[1],
     palette="muted",
 )
-axes[1].set_title("Processed")
+axs[1].set_title("Processed")
 
 st.pyplot(fig)
 
-# ------------------------------------------------------------------
-# 5️⃣  Footer
-# ------------------------------------------------------------------
 st.caption(
-    "Adjust the sliders, selectbox, and radio buttons in the sidebar to see "
-    "how each preprocessing choice reshapes the dataset in real‑time."
+    "Use the sidebar to adjust Winsorization percentiles, imputation method, and scaling. "
+    "Tables and plots update instantly."
 )
